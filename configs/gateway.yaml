@@ -1,0 +1,7 @@
+routes:
+  - path: "/users"
+    method: "GET"
+    target_url: "http://localhost:8085"
+  - path: "/products"
+    method: "GET"
+    target_url: "http://localhost:8086"
