@@ -2,6 +2,9 @@ routes:
   - path: "/users"
     method: "GET"
     target_url: "http://localhost:8085"
+    auth_required: true
+
   - path: "/products"
     method: "GET"
     target_url: "http://localhost:8086"
+    auth_required: false

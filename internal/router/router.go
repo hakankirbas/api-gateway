@@ -1,6 +1,8 @@
 package router
 
 import (
+	"api-gateway/internal/handlers"
+	"api-gateway/internal/middleware"
 	"context"
 	"log"
 	"net/http"
@@ -13,15 +15,17 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/time/rate"
 	"gopkg.in/yaml.v3"
 )
 
 // ProxyRoute represents the structure of our gateway.yaml
 type ProxyRoute struct {
 	Routes []struct {
-		Path      string `yaml:"path"`
-		Method    string `yaml:"method"`
-		TargetUrl string `yaml:"target_url"`
+		Path         string `yaml:"path"`
+		Method       string `yaml:"method"`
+		TargetUrl    string `yaml:"target_url"`
+		AuthRequired bool   `yaml:"auth_required"`
 	} `yaml:"routes"`
 }
 
@@ -45,9 +49,10 @@ func NewHealthManager(interval time.Duration) *HealthManager {
 
 // StartHealthChecks begins monitoring the health of all unique target URLs.
 func (hm *HealthManager) StartHealthChecks(routes []struct {
-	Path      string `yaml:"path"`
-	Method    string `yaml:"method"`
-	TargetUrl string `yaml:"target_url"`
+	Path         string `yaml:"path"`
+	Method       string `yaml:"method"`
+	TargetUrl    string `yaml:"target_url"`
+	AuthRequired bool   `yaml:"auth_required"`
 }) {
 	uniqueTargets := make(map[string]struct{})
 	for _, route := range routes {
@@ -79,13 +84,18 @@ func (hm *HealthManager) checkTargetHealth(targetURL string) {
 
 // performCheck sends an HTTP GET request to the target URL and updates its health status.
 func (hm *HealthManager) performCheck(targetURL string) {
-	resp, err := hm.client.Get(targetURL)
+	healthCheckURL := targetURL + "/health"
+
+	resp, err := hm.client.Get(healthCheckURL)
 	isHealthy := false
-	if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		isHealthy = true
-	}
+	statusCode := 0
 	if resp != nil {
+		statusCode = resp.StatusCode
 		resp.Body.Close()
+	}
+
+	if err == nil && statusCode >= 200 && statusCode < 400 {
+		isHealthy = true
 	}
 
 	hm.mu.Lock()
@@ -98,7 +108,9 @@ func (hm *HealthManager) performCheck(targetURL string) {
 		if isHealthy {
 			statusStr = "HEALTHY"
 		}
-		log.Printf("Health status for %s changed to %s (Error: %v)", targetURL, statusStr, err)
+		log.Printf("Health status for %s changed to %s. (Health Check URL: %s, Status Code: %d, Error: %v)", targetURL, statusStr, healthCheckURL, statusCode, err)
+	} else if !isHealthy {
+		log.Printf("Health check for %s remains UNHEALTHY. (Health Check URL: %s, Status Code: %d, Error: %v)", targetURL, healthCheckURL, statusCode, err)
 	}
 }
 
@@ -122,6 +134,9 @@ func Setup() {
 	healthManager.StartHealthChecks(pr.Routes)
 
 	r := mux.NewRouter()
+
+	r.Use(middleware.RateLimiterMiddleware(rate.Limit(1), 5, 1*time.Minute))
+	r.Use(middleware.LoggingMiddleware)
 
 	pr.registerProxies(r, healthManager)
 
@@ -180,9 +195,15 @@ func (pr *ProxyRoute) registerProxies(r *mux.Router, hm *HealthManager) {
 			proxy.ServeHTTP(w, req)
 		}
 
-		r.HandleFunc(route.Path, proxyHandler).Methods(route.Method)
+		var currentHandler http.Handler = http.HandlerFunc(proxyHandler)
+
+		currentHandler = middleware.AuthMiddleware(currentHandler, route.AuthRequired)
+
+		r.Handle(route.Path, currentHandler).Methods(route.Method)
 		log.Printf("Registered route: %s %s -> %s", route.Method, route.Path, route.TargetUrl)
 	}
+
+	r.HandleFunc("/login", handlers.LoginHandler).Methods("POST")
 
 	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Route not found: %s %s", r.Method, r.URL.Path)
