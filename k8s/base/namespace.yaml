@@ -1,0 +1,63 @@
+# =============================================================================
+# Namespace Configuration for API Gateway
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: api-gateway
+  labels:
+    name: api-gateway
+    environment: base
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/part-of: api-gateway-system
+
+---
+# Service Account for API Gateway
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-gateway
+  namespace: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: service-account
+    app.kubernetes.io/part-of: api-gateway-system
+
+---
+# ClusterRole for API Gateway (service discovery permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: api-gateway-role
+  labels:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: api-gateway-system
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for API Gateway
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: api-gateway-binding
+  labels:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: api-gateway-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: api-gateway-role
+subjects:
+  - kind: ServiceAccount
+    name: api-gateway
+    namespace: api-gateway

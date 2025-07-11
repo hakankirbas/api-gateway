@@ -9,10 +9,10 @@ import (
 )
 
 type AuthMiddleware struct {
-	jwtService *jwt.JWTService
+	jwtService *jwt.Service
 }
 
-func NewAuthMiddleware(jwtService *jwt.JWTService) *AuthMiddleware {
+func NewAuthMiddleware(jwtService *jwt.Service) *AuthMiddleware {
 	return &AuthMiddleware{jwtService: jwtService}
 }
 

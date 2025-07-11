@@ -1,0 +1,65 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: api-gateway-development
+
+resources:
+- ../../base
+
+images:
+- name: api-gateway
+  newTag: latest
+
+labels:
+- pairs:
+    environment: development
+    tier: dev
+
+commonAnnotations:
+  environment: development
+
+replicas:
+- count: 1
+  name: api-gateway
+- count: 1
+  name: product-service
+- count: 1
+  name: user-service
+
+  # Reduce resource requirements for development
+
+  # Update ConfigMap for development settings
+patches:
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "32Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: "10m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "64Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: "50m"
+  target:
+    kind: Deployment
+    name: api-gateway
+- patch: |-
+    - op: replace
+      path: /data/LOG_LEVEL
+      value: "debug"
+    - op: replace
+      path: /data/RATE_LIMIT
+      value: "100"
+    - op: replace
+      path: /data/RATE_BURST_LIMIT
+      value: "200"
+    - op: replace
+      path: /data/HEALTH_CHECK_INTERVAL
+      value: "5s"
+  target:
+    kind: ConfigMap
+    name: api-gateway-config

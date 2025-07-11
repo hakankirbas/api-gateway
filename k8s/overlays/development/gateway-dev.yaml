@@ -1,10 +1,10 @@
 routes:
   - path: "/users"
     method: "GET"
-    target_url: "http://user-service"
+    target_url: "http://user-service-dev"
     auth_required: true
 
   - path: "/products"
     method: "GET"
-    target_url: "http://product-service"
+    target_url: "http://product-service-dev"
     auth_required: false

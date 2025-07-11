@@ -1,24 +1,67 @@
-# --- Build Stage ---
-FROM golang:1.25rc2-alpine3.22 AS builder
-RUN apk update && apk upgrade --no-cache
+# --- Stage 1: Dependencies ---
+FROM golang:1.25rc2-alpine3.22 AS dependencies
+
+RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
+
 COPY go.mod go.sum ./
-RUN go mod download
+
+RUN go mod download && \
+    go mod verify
+
+# --- Stage 2: Build Stage ---
+FROM golang:1.25rc2-alpine3.22 AS builder
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /app
+
+COPY --from=dependencies /go/pkg/mod /go/pkg/mod
+
+COPY go.mod go.sum ./
+
 COPY . .
 
-RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o gateway ./cmd/gateway
+ARG VERSION=dev
+ARG BUILD_TIME
+ARG COMMIT_SHA
 
-FROM alpine:3.20
-RUN apk update && apk upgrade --no-cache
+RUN CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=amd64 \
+    go build \
+    -a \
+    -installsuffix cgo \
+    -ldflags="-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commitSHA=${COMMIT_SHA}" \
+    -o gateway \
+    ./cmd/gateway
 
-# RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-# USER appuser
+RUN ./gateway --version || echo "Binary built successfully"
+
+# --- Stage 3: Runtime ---
+FROM alpine:3.22 AS runtime
+
+RUN apk --no-cache add ca-certificates tzdata && \
+    addgroup -S appgroup && \
+    adduser -S appuser -G appgroup -u 1001
 
 WORKDIR /app
-COPY --from=builder /app/gateway .
-COPY configs/gateway.yaml ./configs/gateway.yaml
+
+RUN mkdir -p /app/configs /app/logs && \
+    chown -R appuser:appgroup /app
+
+COPY --from=builder --chown=appuser:appgroup /app/gateway .
+
+COPY --chown=appuser:appgroup configs/gateway.yaml ./configs/
+
+USER appuser
+
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
 ENTRYPOINT ["./gateway"]
 
-# CMD ["--config", "./configs/gateway.yaml"] # Eğer gateway binary'si argüman alıyorsa
+CMD ["--config", "./configs/gateway.yaml"]

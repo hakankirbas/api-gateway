@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        VERSION: dev
+        BUILD_TIME: ${BUILD_TIME:-dev}
+        COMMIT_SHA: ${COMMIT_SHA:-dev}
+    image: api-gateway:dev
+    container_name: api-gateway-dev
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=:8080
+      - JWT_SECRET=dev-secret-key-change-in-production
+      - JWT_EXPIRATION=24h
+      - RATE_LIMIT=10
+      - RATE_BURST_LIMIT=20
+      - RATE_CLEANUP=1m
+      - HEALTH_CHECK_INTERVAL=10s
+      - HEALTH_CHECK_TIMEOUT=5s
+    volumes:
+      # Mount config for development
+      - ./configs:/app/configs:ro
+      # Mount logs directory
+      - ./logs:/app/logs
+    networks:
+      - gateway-network
+    depends_on:
+      - user-service
+      - product-service
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Mock User Service
+  user-service:
+    image: httpd:alpine
+    container_name: user-service-mock
+    ports:
+      - "8085:80"
+    volumes:
+      - ./mocks/user-service:/usr/local/apache2/htdocs:ro
+    networks:
+      - gateway-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # Mock Product Service
+  product-service:
+    image: httpd:alpine
+    container_name: product-service-mock
+    ports:
+      - "8086:80"
+    volumes:
+      - ./mocks/product-service:/usr/local/apache2/htdocs:ro
+    networks:
+      - gateway-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # Redis
+  redis:
+    image: redis:alpine
+    container_name: gateway-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - gateway-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gateway-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - gateway-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+networks:
+  gateway-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local

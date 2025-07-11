@@ -10,10 +10,11 @@ import (
 )
 
 type Config struct {
-	Server ServerConfig
-	JWT    JWTConfig
-	Rate   RateLimitConfig
-	Health HealthConfig
+	Server     ServerConfig
+	JWT        JWTConfig
+	Rate       RateLimitConfig
+	Health     HealthConfig
+	Kubernetes KubernetesConfig
 }
 
 type ServerConfig struct {
@@ -38,6 +39,15 @@ type HealthConfig struct {
 	Timeout       time.Duration
 }
 
+type KubernetesConfig struct {
+	Enabled            bool
+	Namespace          string
+	InCluster          bool
+	KubeconfigPath     string
+	ServiceDiscovery   bool
+	WatchAllNamespaces bool
+}
+
 func Load() *Config {
 	godotenv.Load()
 
@@ -60,6 +70,14 @@ func Load() *Config {
 			CheckInterval: getEnvAsDuration("HEALTH_CHECK_INTERVAL", 10*time.Second),
 			Timeout:       getEnvAsDuration("HEALTH_CHECK_TIMEOUT", 5*time.Second),
 		},
+		Kubernetes: KubernetesConfig{
+			Enabled:            getEnvAsBool("KUBERNETES_ENABLED", true),
+			Namespace:          getEnv("KUBERNETES_NAMESPACE", "api-gateway"),
+			InCluster:          getEnvAsBool("KUBERNETES_IN_CLUSTER", true),
+			KubeconfigPath:     getEnv("KUBECONFIG_PATH", ""),
+			ServiceDiscovery:   getEnvAsBool("KUBERNETES_SERVICE_DISCOVERY", true),
+			WatchAllNamespaces: getEnvAsBool("KUBERNETES_WATCH_ALL_NAMESPACES", false),
+		},
 	}
 }
 
@@ -72,6 +90,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Rate.BurstLimit <= 0 {
 		return errors.New("RATE_BURST_LIMIT must be positive")
+	}
+	if c.Kubernetes.Enabled && c.Kubernetes.Namespace == "" {
+		return errors.New("KUBERNETES_NAMESPACE must be set when Kubernetes is enabled")
 	}
 	return nil
 }
@@ -89,6 +110,18 @@ func getEnvAsInt(key string, fallback int) int {
 		return fallback
 	}
 	val, err := strconv.Atoi(valStr)
+	if err != nil {
+		return fallback
+	}
+	return val
+}
+
+func getEnvAsBool(key string, fallback bool) bool {
+	valStr := getEnv(key, "")
+	if valStr == "" {
+		return fallback
+	}
+	val, err := strconv.ParseBool(valStr)
 	if err != nil {
 		return fallback
 	}

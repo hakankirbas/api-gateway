@@ -8,7 +8,7 @@ import (
 )
 
 type LoginHandler struct {
-	jwtService *jwt.JWTService
+	jwtService *jwt.Service
 }
 
 type User struct {
@@ -16,7 +16,7 @@ type User struct {
 	Password string `json:"password"`
 }
 
-func NewLoginHandler(jwtService *jwt.JWTService) *LoginHandler {
+func NewLoginHandler(jwtService *jwt.Service) *LoginHandler {
 	return &LoginHandler{jwtService: jwtService}
 }
 

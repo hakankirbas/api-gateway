@@ -1,0 +1,71 @@
+# =============================================================================
+# Service for API Gateway
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: api-gateway-system
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+      nodePort: 30080
+  sessionAffinity: None
+
+---
+# Internal Service for inter-service communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-internal
+  namespace: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: internal-service
+    app.kubernetes.io/part-of: api-gateway-system
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  sessionAffinity: None
+
+---
+# Headless Service for service discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-headless
+  namespace: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: headless-service
+    app.kubernetes.io/part-of: api-gateway-system
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
