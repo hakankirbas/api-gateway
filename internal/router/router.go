@@ -1,8 +1,10 @@
 package router
 
 import (
+	"api-gateway/internal/config"
 	"api-gateway/internal/handlers"
 	"api-gateway/internal/middleware"
+	"api-gateway/pkg/jwt"
 	"context"
 	"log"
 	"net/http"
@@ -38,10 +40,10 @@ type HealthManager struct {
 	stopCh        chan struct{}
 }
 
-func NewHealthManager(interval time.Duration) *HealthManager {
+func NewHealthManager(interval time.Duration, timeout time.Duration) *HealthManager {
 	return &HealthManager{
 		statuses:      make(map[string]bool),
-		client:        &http.Client{Timeout: 5 * time.Second},
+		client:        &http.Client{Timeout: timeout},
 		checkInterval: interval,
 		stopCh:        make(chan struct{}),
 	}
@@ -127,39 +129,54 @@ func (hm *HealthManager) StopHealthChecks() {
 }
 
 // Setup initializes and starts the API Gateway server.
-func Setup() {
-	pr := getProxyRoutes()
+func Setup(cfg *config.Config) {
+	// Create dependencies with injected config
+	healthManager := NewHealthManager(cfg.Health.CheckInterval, cfg.Health.Timeout)
+	jwtService := jwt.NewJWTService(cfg.JWT)
 
-	healthManager := NewHealthManager(10 * time.Second)
+	// Load proxy routes
+	pr := getProxyRoutes()
 	healthManager.StartHealthChecks(pr.Routes)
 
+	// Create router with middleware
 	r := mux.NewRouter()
 
-	r.Use(middleware.RateLimiterMiddleware(rate.Limit(1), 5, 1*time.Minute))
+	// Apply middleware with injected config
+	rateLimiter := middleware.NewRateLimiter(
+		rate.Limit(cfg.Rate.Limit),
+		cfg.Rate.BurstLimit,
+		cfg.Rate.CleanupInterval,
+	)
+
+	r.Use(rateLimiter.Middleware)
 	r.Use(middleware.LoggingMiddleware)
 
-	pr.registerProxies(r, healthManager)
+	// Register routes with dependencies
+	pr.registerProxies(r, healthManager, jwtService)
 
-	port := ":8080"
-	log.Printf("API Gateway started on %s", port)
-
+	// Create server with config
 	server := &http.Server{
-		Addr:    port,
-		Handler: r,
+		Addr:         cfg.Server.Port,
+		Handler:      r,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
 	}
 
+	log.Printf("API Gateway started on %s", cfg.Server.Port)
+
+	// Start server
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Error while initializing API Gateway: %v", err)
 		}
 	}()
 
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Println("Shutdown signal received. API Gateway is shutting down...")
-
 	healthManager.StopHealthChecks()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -173,7 +190,9 @@ func Setup() {
 }
 
 // registerProxies iterates through the configured routes and registers them with the Mux router.
-func (pr *ProxyRoute) registerProxies(r *mux.Router, hm *HealthManager) {
+func (pr *ProxyRoute) registerProxies(r *mux.Router, hm *HealthManager, jwt *jwt.JWTService) {
+	authMiddleware := middleware.NewAuthMiddleware(jwt)
+
 	for _, route := range pr.Routes {
 		targetURL, err := url.Parse(route.TargetUrl)
 		if err != nil {
@@ -197,13 +216,14 @@ func (pr *ProxyRoute) registerProxies(r *mux.Router, hm *HealthManager) {
 
 		var currentHandler http.Handler = http.HandlerFunc(proxyHandler)
 
-		currentHandler = middleware.AuthMiddleware(currentHandler, route.AuthRequired)
+		currentHandler = authMiddleware.Middleware(route.AuthRequired)(currentHandler)
 
 		r.Handle(route.Path, currentHandler).Methods(route.Method)
 		log.Printf("Registered route: %s %s -> %s", route.Method, route.Path, route.TargetUrl)
 	}
 
-	r.HandleFunc("/login", handlers.LoginHandler).Methods("POST")
+	loginHandler := handlers.NewLoginHandler(jwt)
+	r.HandleFunc("/login", loginHandler.Handle).Methods("POST")
 
 	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Route not found: %s %s", r.Method, r.URL.Path)

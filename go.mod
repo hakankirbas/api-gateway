@@ -9,5 +9,6 @@ require (
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	golang.org/x/time v0.12.0 // indirect
 )
