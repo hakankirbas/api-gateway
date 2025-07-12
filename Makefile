@@ -471,3 +471,166 @@ k8s-help: ## Show Kubernetes-specific help
 	@echo "  $(GREEN)k8s-logs$(NC)           - Show application logs"
 	@echo "  $(GREEN)k8s-test$(NC)           - Test endpoints"
 	@echo "  $(GREEN)k8s-uninstall$(NC)      - Remove deployment"
+
+# =============================================================================
+# Enhanced Testing and Monitoring
+# =============================================================================
+
+.PHONY: test-enhanced
+test-enhanced: ## Test enhanced load balancing and circuit breaking features
+	@echo "$(BLUE)Testing enhanced API Gateway features...$(NC)"
+	@chmod +x scripts/test-enhanced.sh
+	@./scripts/test-enhanced.sh
+
+.PHONY: test-load-balancing
+test-load-balancing: ## Test load balancing functionality specifically
+	@echo "$(BLUE)Testing load balancing...$(NC)"
+	@echo "Getting JWT token..."
+	@TOKEN=$(curl -s -X POST http://localhost:30080/login \
+		-H "Content-Type: application/json" \
+		-d '{"username": "Hako", "password": "123"}' | tr -d '"'); \
+	echo "Testing products endpoint (10 requests):"; \
+	for i in $(seq 1 10); do \
+		curl -s http://localhost:30080/products | jq -r '.service // "N/A"' | sed "s/^/Request $i: /"; \
+		sleep 0.5; \
+	done; \
+	echo "Testing users endpoint (10 requests):"; \
+	for i in $(seq 1 10); do \
+		curl -s -H "Authorization: Bearer $TOKEN" http://localhost:30080/users | jq -r '.service // "N/A"' | sed "s/^/Request $i: /"; \
+		sleep 0.5; \
+	done
+
+.PHONY: test-circuit-breaker
+test-circuit-breaker: ## Test circuit breaker functionality
+	@echo "$(BLUE)Testing circuit breaker...$(NC)"
+	@echo "Scaling down user-service to trigger circuit breaker..."
+	@kubectl scale deployment user-service -n api-gateway --replicas=0
+	@sleep 10
+	@echo "Making requests to trigger circuit breaker..."
+	@TOKEN=$(curl -s -X POST http://localhost:30080/login \
+		-H "Content-Type: application/json" \
+		-d '{"username": "Hako", "password": "123"}' | tr -d '"'); \
+	for i in $(seq 1 15); do \
+		response=$(curl -s -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:30080/users -o /dev/null); \
+		echo "Request $i: HTTP $response"; \
+		sleep 1; \
+	done
+	@echo "Circuit breaker status:"
+	@curl -s http://localhost:30080/admin/circuit-breakers | jq .
+	@echo "Restoring user-service..."
+	@kubectl scale deployment user-service -n api-gateway --replicas=1
+
+.PHONY: monitor-admin
+monitor-admin: ## Show admin endpoints status
+	@echo "$(BLUE)Admin endpoints status:$(NC)"
+	@echo "Services:"
+	@curl -s http://localhost:30080/admin/services | jq .
+	@echo -e "\nRoutes:"
+	@curl -s http://localhost:30080/admin/routes | jq .
+	@echo -e "\nLoad Balancers:"
+	@curl -s http://localhost:30080/admin/load-balancers | jq .
+	@echo -e "\nCircuit Breakers:"
+	@curl -s http://localhost:30080/admin/circuit-breakers | jq .
+	@echo -e "\nHealth Overview:"
+	@curl -s http://localhost:30080/admin/health-overview | jq .
+
+.PHONY: stress-test
+stress-test: ## Run stress test to validate load balancing and circuit breaking
+	@echo "$(BLUE)Running stress test...$(NC)"
+	@echo "Getting JWT token..."
+	@TOKEN=$(curl -s -X POST http://localhost:30080/login \
+		-H "Content-Type: application/json" \
+		-d '{"username": "Hako", "password": "123"}' | tr -d '"'); \
+	echo "Running 100 concurrent requests..."; \
+	seq 1 100 | xargs -n1 -P10 -I{} sh -c "curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:30080/users > /dev/null; curl -s http://localhost:30080/products > /dev/null; echo \"Batch {} completed\""
+	@echo "Stress test completed. Checking statistics..."
+	@curl -s http://localhost:30080/admin/health-overview | jq .
+
+.PHONY: watch-logs
+watch-logs: ## Watch API Gateway logs with enhanced filtering
+	@echo "$(BLUE)Watching API Gateway logs...$(NC)"
+	kubectl logs -n api-gateway deployment/api-gateway -f | grep -E "(load.balanc|circuit.break|endpoint|route|ERROR|WARN)" --color=always
+
+.PHONY: deploy-enhanced
+deploy-enhanced: build-docker k8s-deploy-dev test-enhanced ## Build, deploy and test enhanced features
+	@echo "$(GREEN)Enhanced API Gateway deployed and tested successfully!$(NC)"
+
+.PHONY: benchmark-enhanced
+benchmark-enhanced: ## Benchmark the enhanced gateway
+	@echo "$(BLUE)Benchmarking enhanced API Gateway...$(NC)"
+	@command -v ab >/dev/null 2>&1 || { echo "$(RED)Apache Bench (ab) is required$(NC)"; exit 1; }
+	@TOKEN=$(curl -s -X POST http://localhost:30080/login \
+		-H "Content-Type: application/json" \
+		-d '{"username": "Hako", "password": "123"}' | tr -d '"'); \
+	echo "Benchmarking products endpoint (no auth):"; \
+	ab -n 1000 -c 10 http://localhost:30080/products; \
+	echo "Benchmarking users endpoint (with auth):"; \
+	ab -n 1000 -c 10 -H "Authorization: Bearer $TOKEN" http://localhost:30080/users
+	@echo "Post-benchmark statistics:"
+	@curl -s http://localhost:30080/admin/health-overview | jq .
+
+.PHONY: setup-monitoring
+setup-monitoring: ## Setup enhanced monitoring for load balancing and circuit breaking
+	@echo "$(BLUE)Setting up enhanced monitoring...$(NC)"
+	@mkdir -p monitoring
+	@cat > monitoring/enhanced-prometheus.yml << 'EOF' && \
+global: \
+  scrape_interval: 15s \
+  evaluation_interval: 15s \
+\
+scrape_configs: \
+  - job_name: "api-gateway-enhanced" \
+    static_configs: \
+      - targets: ["gateway:8080"] \
+    metrics_path: "/metrics" \
+    scrape_interval: 10s \
+    scrape_timeout: 5s \
+\
+  - job_name: "api-gateway-admin" \
+    static_configs: \
+      - targets: ["gateway:8080"] \
+    metrics_path: "/admin/health-overview" \
+    scrape_interval: 30s \
+    scrape_timeout: 10s \
+EOF \
+	echo "Enhanced monitoring configuration created"
+
+.PHONY: validate-enhanced
+validate-enhanced: ## Validate enhanced features are working correctly
+	@echo "$(BLUE)Validating enhanced features...$(NC)"
+	@echo "1. Checking if load balancers are created..."
+	@curl -s http://localhost:30080/admin/load-balancers | jq 'keys | length' | \
+		{ read count; [ "$count" -gt 0 ] && echo "✅ Load balancers: $count found" || echo "❌ No load balancers found"; }
+	@echo "2. Checking if circuit breakers are initialized..."
+	@curl -s http://localhost:30080/admin/circuit-breakers | jq 'keys | length' | \
+		{ read count; [ "$count" -gt 0 ] && echo "✅ Circuit breakers: $count found" || echo "❌ No circuit breakers found"; }
+	@echo "3. Checking service health..."
+	@curl -s http://localhost:30080/admin/health-overview | jq '.summary.service_health_rate' | \
+		{ read rate; echo "✅ Service health rate: $rate%"; }
+	@echo "4. Testing basic functionality..."
+	@curl -f -s http://localhost:30080/health >/dev/null && echo "✅ Health endpoint working" || echo "❌ Health endpoint failed"
+	@curl -f -s http://localhost:30080/products >/dev/null && echo "✅ Products endpoint working" || echo "❌ Products endpoint failed"
+
+# =============================================================================
+# Enhanced Help
+# =============================================================================
+
+.PHONY: help-enhanced
+help-enhanced: ## Show help for enhanced features
+	@echo "$(BLUE)Enhanced API Gateway Commands:$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Testing:$(NC)"
+	@echo "  $(GREEN)test-enhanced$(NC)      - Full enhanced features test"
+	@echo "  $(GREEN)test-load-balancing$(NC) - Test load balancing only"
+	@echo "  $(GREEN)test-circuit-breaker$(NC) - Test circuit breaker only"
+	@echo "  $(GREEN)stress-test$(NC)        - Run stress test"
+	@echo "  $(GREEN)benchmark-enhanced$(NC) - Benchmark performance"
+	@echo ""
+	@echo "$(YELLOW)Monitoring:$(NC)"
+	@echo "  $(GREEN)monitor-admin$(NC)      - Show admin endpoints"
+	@echo "  $(GREEN)watch-logs$(NC)         - Watch filtered logs"
+	@echo "  $(GREEN)validate-enhanced$(NC)  - Validate features"
+	@echo ""
+	@echo "$(YELLOW)Deployment:$(NC)"
+	@echo "  $(GREEN)deploy-enhanced$(NC)    - Build, deploy, and test"
+	@echo "  $(GREEN)setup-monitoring$(NC)   - Setup enhanced monitoring"

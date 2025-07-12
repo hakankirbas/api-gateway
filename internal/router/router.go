@@ -185,11 +185,22 @@ func setupRoutes(r *mux.Router, cfg *config.Config, authMiddleware *middleware.A
 	setupCoreRoutes(r, jwtService, structuredLogger)
 	setupDiscoveryRoutes(r, discoveryManager, structuredLogger)
 
+	// Enhanced dynamic route manager
+	var dynamicRouteManager *services.DynamicRouteManager
+
 	if !cfg.Kubernetes.ServiceDiscovery {
 		routerLogger.Info("Service discovery disabled, using static route configuration")
 		setupStaticRoutes(r, cfg, authMiddleware, structuredLogger)
 	} else {
 		routerLogger.Info("Service discovery enabled, routes will be managed dynamically")
+
+		// Create enhanced dynamic route manager
+		dynamicRouteManager = services.NewDynamicRouteManager(r, discoveryManager, authMiddleware)
+
+		// Setup admin endpoints for the enhanced features
+		dynamicRouteManager.SetupAdminEndpoints(r)
+
+		routerLogger.Info("Enhanced dynamic route manager initialized with load balancing and circuit breaking")
 	}
 
 	// Enhanced 404 handler with logging
@@ -259,7 +270,7 @@ func setupDiscoveryRoutes(r *mux.Router, discoveryManager *services.DiscoveryMan
 			"service_count": len(services),
 		})
 
-		if err := writeJSONResponse(w, response); err != nil {
+		if err := json.NewEncoder(w).Encode(response); err != nil {
 			contextLogger.Error("Failed to write services response", map[string]interface{}{
 				"error": err,
 			})
@@ -289,7 +300,7 @@ func setupDiscoveryRoutes(r *mux.Router, discoveryManager *services.DiscoveryMan
 			"route_count": len(routes),
 		})
 
-		if err := writeJSONResponse(w, response); err != nil {
+		if err := json.NewEncoder(w).Encode(response); err != nil {
 			contextLogger.Error("Failed to write routes response", map[string]interface{}{
 				"error": err,
 			})
@@ -304,7 +315,7 @@ func setupDiscoveryRoutes(r *mux.Router, discoveryManager *services.DiscoveryMan
 
 		contextLogger.Info("Admin stats endpoint accessed")
 
-		if err := writeJSONResponse(w, stats); err != nil {
+		if err := json.NewEncoder(w).Encode(stats); err != nil {
 			contextLogger.Error("Failed to write stats response", map[string]interface{}{
 				"error": err,
 			})
