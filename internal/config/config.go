@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -15,6 +16,30 @@ type Config struct {
 	Rate       RateLimitConfig
 	Health     HealthConfig
 	Kubernetes KubernetesConfig
+	Logging    LoggingConfig
+}
+
+// LoggingConfig holds logging-related configuration
+type LoggingConfig struct {
+	Level       string `yaml:"level" json:"level"`
+	Format      string `yaml:"format" json:"format"`
+	Output      string `yaml:"output" json:"output"`
+	EnableHooks bool   `yaml:"enable_hooks" json:"enable_hooks"`
+
+	// Error tracking configuration
+	ErrorWebhookURL string        `yaml:"error_webhook_url" json:"error_webhook_url"`
+	SlackWebhookURL string        `yaml:"slack_webhook_url" json:"slack_webhook_url"`
+	AlertCooldown   time.Duration `yaml:"alert_cooldown" json:"alert_cooldown"`
+
+	// Request logging configuration
+	LogRequests          bool          `yaml:"log_requests" json:"log_requests"`
+	LogResponses         bool          `yaml:"log_responses" json:"log_responses"`
+	LogHeaders           bool          `yaml:"log_headers" json:"log_headers"`
+	SensitiveHeaders     []string      `yaml:"sensitive_headers" json:"sensitive_headers"`
+	SlowRequestThreshold time.Duration `yaml:"slow_request_threshold" json:"slow_request_threshold"`
+
+	// Loki
+	LokiURL string `yaml:"loki_url" json:"loki_url"`
 }
 
 type ServerConfig struct {
@@ -78,6 +103,21 @@ func Load() *Config {
 			ServiceDiscovery:   getEnvAsBool("KUBERNETES_SERVICE_DISCOVERY", true),
 			WatchAllNamespaces: getEnvAsBool("KUBERNETES_WATCH_ALL_NAMESPACES", false),
 		},
+		Logging: LoggingConfig{
+			Level:                getEnv("LOG_LEVEL", "info"),
+			Format:               getEnv("LOG_FORMAT", "json"),
+			Output:               getEnv("LOG_OUTPUT", "stdout"),
+			EnableHooks:          getEnvAsBool("LOG_ENABLE_HOOKS", true),
+			ErrorWebhookURL:      getEnv("ERROR_WEBHOOK_URL", ""),
+			SlackWebhookURL:      getEnv("SLACK_WEBHOOK_URL", ""),
+			AlertCooldown:        getEnvAsDuration("ALERT_COOLDOWN", 5*time.Minute),
+			LogRequests:          getEnvAsBool("LOG_REQUESTS", true),
+			LogResponses:         getEnvAsBool("LOG_RESPONSES", true),
+			LogHeaders:           getEnvAsBool("LOG_HEADERS", true),
+			SensitiveHeaders:     getEnvAsStringSlice("SENSITIVE_HEADERS", []string{"authorization", "cookie", "x-api-key"}),
+			SlowRequestThreshold: getEnvAsDuration("SLOW_REQUEST_THRESHOLD", 5*time.Second),
+			LokiURL:              getEnv("LOG_LOKI_URL", ""),
+		},
 	}
 }
 
@@ -94,6 +134,21 @@ func (c *Config) Validate() error {
 	if c.Kubernetes.Enabled && c.Kubernetes.Namespace == "" {
 		return errors.New("KUBERNETES_NAMESPACE must be set when Kubernetes is enabled")
 	}
+
+	validLevels := map[string]bool{
+		"debug": true, "info": true, "warn": true, "error": true, "fatal": true,
+	}
+	if !validLevels[c.Logging.Level] {
+		return errors.New("LOG_LEVEL must be one of: debug, info, warn, error, fatal")
+	}
+
+	validFormats := map[string]bool{
+		"json": true, "text": true,
+	}
+	if !validFormats[c.Logging.Format] {
+		return errors.New("LOG_FORMAT must be one of: json, text")
+	}
+
 	return nil
 }
 
@@ -138,4 +193,26 @@ func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return val
+}
+
+func getEnvAsStringSlice(key string, fallback []string) []string {
+	valStr := getEnv(key, "")
+	if valStr == "" {
+		return fallback
+	}
+
+	// Split by comma and trim spaces
+	result := make([]string, 0)
+	for _, item := range strings.Split(valStr, ",") {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	if len(result) == 0 {
+		return fallback
+	}
+
+	return result
 }

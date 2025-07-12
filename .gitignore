@@ -10,6 +10,7 @@
 /gateway.exe
 gateway
 gateway.exe
+/mocks
 
 # Test binary, built with `go test -c`
 *.test

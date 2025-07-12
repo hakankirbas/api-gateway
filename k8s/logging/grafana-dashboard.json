@@ -1,0 +1,430 @@
+{
+    "dashboard": {
+        "id": null,
+        "title": "API Gateway Logs - Loki Dashboard",
+        "tags": [
+            "api-gateway",
+            "loki",
+            "logs"
+        ],
+        "timezone": "browser",
+        "panels": [
+            {
+                "id": 1,
+                "title": "Log Volume Over Time",
+                "type": "stat",
+                "targets": [
+                    {
+                        "expr": "sum(count_over_time({app=\"api-gateway\"} [1m]))",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "logs/min",
+                        "color": {
+                            "mode": "thresholds"
+                        },
+                        "thresholds": {
+                            "steps": [
+                                {
+                                    "color": "green",
+                                    "value": null
+                                },
+                                {
+                                    "color": "yellow",
+                                    "value": 100
+                                },
+                                {
+                                    "color": "red",
+                                    "value": 1000
+                                }
+                            ]
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 6,
+                    "x": 0,
+                    "y": 0
+                }
+            },
+            {
+                "id": 2,
+                "title": "Error Rate",
+                "type": "stat",
+                "targets": [
+                    {
+                        "expr": "sum(count_over_time({app=\"api-gateway\", level=\"ERROR\"} [5m])) / sum(count_over_time({app=\"api-gateway\"} [5m])) * 100",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "percent",
+                        "color": {
+                            "mode": "thresholds"
+                        },
+                        "thresholds": {
+                            "steps": [
+                                {
+                                    "color": "green",
+                                    "value": null
+                                },
+                                {
+                                    "color": "yellow",
+                                    "value": 1
+                                },
+                                {
+                                    "color": "red",
+                                    "value": 5
+                                }
+                            ]
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 6,
+                    "x": 6,
+                    "y": 0
+                }
+            },
+            {
+                "id": 3,
+                "title": "Active Users (Last Hour)",
+                "type": "stat",
+                "targets": [
+                    {
+                        "expr": "count(count by (user_id) (count_over_time({app=\"api-gateway\"} | json | user_id != \"\" [1h])))",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "users",
+                        "color": {
+                            "mode": "value"
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 6,
+                    "x": 12,
+                    "y": 0
+                }
+            },
+            {
+                "id": 4,
+                "title": "Components Status",
+                "type": "stat",
+                "targets": [
+                    {
+                        "expr": "count by (component) (count_over_time({app=\"api-gateway\"} | json [5m]))",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "gridPos": {
+                    "h": 8,
+                    "w": 6,
+                    "x": 18,
+                    "y": 0
+                }
+            },
+            {
+                "id": 5,
+                "title": "Log Levels Over Time",
+                "type": "timeseries",
+                "targets": [
+                    {
+                        "expr": "sum by (level) (count_over_time({app=\"api-gateway\"} | json [1m]))",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "custom": {
+                            "drawStyle": "line",
+                            "lineInterpolation": "linear",
+                            "barAlignment": 0,
+                            "lineWidth": 1,
+                            "fillOpacity": 0,
+                            "gradientMode": "none",
+                            "spanNulls": false,
+                            "insertNulls": false,
+                            "showPoints": "auto",
+                            "pointSize": 5,
+                            "stacking": {
+                                "mode": "none",
+                                "group": "A"
+                            },
+                            "axisPlacement": "auto",
+                            "axisLabel": "",
+                            "axisColorMode": "text",
+                            "scaleDistribution": {
+                                "type": "linear"
+                            },
+                            "axisCenteredZero": false,
+                            "hideFrom": {
+                                "legend": false,
+                                "tooltip": false,
+                                "vis": false
+                            },
+                            "thresholdsStyle": {
+                                "mode": "off"
+                            }
+                        },
+                        "color": {
+                            "mode": "palette-classic"
+                        },
+                        "unit": "logs/min"
+                    }
+                },
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 0,
+                    "y": 8
+                }
+            },
+            {
+                "id": 6,
+                "title": "HTTP Status Codes",
+                "type": "timeseries",
+                "targets": [
+                    {
+                        "expr": "sum by (status_code) (count_over_time({app=\"api-gateway\"} | json | status_code != \"\" [1m]))",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "custom": {
+                            "drawStyle": "line",
+                            "lineInterpolation": "linear"
+                        },
+                        "color": {
+                            "mode": "palette-classic"
+                        },
+                        "unit": "requests/min"
+                    }
+                },
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 12,
+                    "y": 8
+                }
+            },
+            {
+                "id": 7,
+                "title": "Recent Error Logs",
+                "type": "logs",
+                "targets": [
+                    {
+                        "expr": "{app=\"api-gateway\", level=\"ERROR\"} | json",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "options": {
+                    "showTime": true,
+                    "showLabels": false,
+                    "showCommonLabels": false,
+                    "wrapLogMessage": false,
+                    "prettifyLogMessage": false,
+                    "enableLogDetails": true,
+                    "dedupStrategy": "none",
+                    "sortOrder": "Descending"
+                },
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 0,
+                    "y": 17
+                }
+            },
+            {
+                "id": 8,
+                "title": "Top API Endpoints",
+                "type": "table",
+                "targets": [
+                    {
+                        "expr": "topk(10, sum by (path) (count_over_time({app=\"api-gateway\"} | json | path != \"\" [1h])))",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "transformations": [
+                    {
+                        "id": "organize",
+                        "options": {
+                            "excludeByName": {},
+                            "indexByName": {},
+                            "renameByName": {
+                                "path": "Endpoint",
+                                "Value": "Request Count"
+                            }
+                        }
+                    }
+                ],
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 12,
+                    "y": 17
+                }
+            },
+            {
+                "id": 9,
+                "title": "Slow Requests (>2s)",
+                "type": "logs",
+                "targets": [
+                    {
+                        "expr": "{app=\"api-gateway\"} | json | duration > 2s",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "options": {
+                    "showTime": true,
+                    "showLabels": true,
+                    "showCommonLabels": false,
+                    "wrapLogMessage": false,
+                    "prettifyLogMessage": true,
+                    "enableLogDetails": true,
+                    "dedupStrategy": "none",
+                    "sortOrder": "Descending"
+                },
+                "gridPos": {
+                    "h": 9,
+                    "w": 24,
+                    "x": 0,
+                    "y": 26
+                }
+            },
+            {
+                "id": 10,
+                "title": "Request Correlation Tracking",
+                "type": "logs",
+                "targets": [
+                    {
+                        "expr": "{app=\"api-gateway\"} | json | correlation_id=\"${correlation_id}\"",
+                        "refId": "A",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        }
+                    }
+                ],
+                "options": {
+                    "showTime": true,
+                    "showLabels": true,
+                    "showCommonLabels": false,
+                    "wrapLogMessage": false,
+                    "prettifyLogMessage": true,
+                    "enableLogDetails": true,
+                    "dedupStrategy": "none",
+                    "sortOrder": "Ascending"
+                },
+                "gridPos": {
+                    "h": 9,
+                    "w": 24,
+                    "x": 0,
+                    "y": 35
+                }
+            }
+        ],
+        "templating": {
+            "list": [
+                {
+                    "name": "correlation_id",
+                    "type": "textbox",
+                    "label": "Correlation ID",
+                    "description": "Enter correlation ID to track specific request",
+                    "query": "",
+                    "current": {
+                        "value": "",
+                        "text": ""
+                    }
+                },
+                {
+                    "name": "time_range",
+                    "type": "interval",
+                    "label": "Time Range",
+                    "auto": true,
+                    "auto_count": 30,
+                    "auto_min": "10s",
+                    "current": {
+                        "text": "1m",
+                        "value": "1m"
+                    },
+                    "options": [
+                        {
+                            "text": "1m",
+                            "value": "1m"
+                        },
+                        {
+                            "text": "5m",
+                            "value": "5m"
+                        },
+                        {
+                            "text": "10m",
+                            "value": "10m"
+                        },
+                        {
+                            "text": "30m",
+                            "value": "30m"
+                        },
+                        {
+                            "text": "1h",
+                            "value": "1h"
+                        }
+                    ]
+                }
+            ]
+        },
+        "time": {
+            "from": "now-1h",
+            "to": "now"
+        },
+        "refresh": "5s",
+        "schemaVersion": 30,
+        "version": 1
+    }
+}
