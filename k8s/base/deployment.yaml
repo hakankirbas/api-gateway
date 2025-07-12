@@ -96,16 +96,19 @@ spec:
                 configMapKeyRef:
                   name: api-gateway-config
                   key: WRITE_TIMEOUT
+            # Logging configuration
             - name: LOG_LEVEL
-              valueFrom:
-                configMapKeyRef:
-                  name: api-gateway-config
-                  key: LOG_LEVEL
+              value: "info"
             - name: LOG_FORMAT
-              valueFrom:
-                configMapKeyRef:
-                  name: api-gateway-config
-                  key: LOG_FORMAT
+              value: "json"
+            - name: LOG_OUTPUT  
+              value: "stdout"
+            - name: LOG_ENABLE_HOOKS
+              value: "false"
+            - name: LOG_REQUESTS
+              value: "true"
+            - name: ENVIRONMENT
+              value: "kubernetes"
             # Sensitive environment variables from Secret
             - name: JWT_SECRET
               valueFrom:

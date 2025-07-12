@@ -47,13 +47,12 @@ type HealthManager struct {
 func Setup(cfg *config.Config) {
 	ctx := context.Background()
 
-	// Initialize structured logger
 	structuredLogger := logger.NewLogger(logger.Config{
 		Level:       cfg.Logging.Level,
-		Format:      cfg.Logging.Format,
+		Format:      "json",
 		Service:     "api-gateway",
-		Output:      cfg.Logging.Output,
-		EnableHooks: cfg.Logging.EnableHooks,
+		Output:      "stdout",
+		EnableHooks: false,
 	})
 
 	// Add custom hooks if webhook URLs are configured
@@ -71,17 +70,13 @@ func Setup(cfg *config.Config) {
 	metricsHook := logger.NewMetricsHook()
 	structuredLogger.AddHook(metricsHook)
 
-	appLogger := structuredLogger.WithComponent("app")
-	appLogger.Info("Starting API Gateway", map[string]interface{}{
-		"version":     "1.0.0",
-		"environment": os.Getenv("ENVIRONMENT"),
-		"config": map[string]interface{}{
-			"server_port":        cfg.Server.Port,
-			"kubernetes_enabled": cfg.Kubernetes.Enabled,
-			"service_discovery":  cfg.Kubernetes.ServiceDiscovery,
-			"log_level":          cfg.Logging.Level,
-			"log_format":         cfg.Logging.Format,
-		},
+	appLogger := structuredLogger.WithComponent("startup")
+	appLogger.Info("API Gateway starting", map[string]interface{}{
+		"version":      "1.0.0",
+		"environment":  os.Getenv("ENVIRONMENT"),
+		"log_format":   "json",
+		"log_level":    cfg.Logging.Level,
+		"startup_time": time.Now().UTC(),
 	})
 
 	// Initialize discovery manager

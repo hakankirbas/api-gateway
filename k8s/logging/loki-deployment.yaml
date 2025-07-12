@@ -30,7 +30,7 @@ spec:
         - name: loki
           image: grafana/loki:2.9.0
           ports:
-            - containerPort: 3110
+            - containerPort: 3100
               name: http-metrics
             - containerPort: 9096
               name: grpc
@@ -82,7 +82,7 @@ metadata:
     app: loki
 spec:
   ports:
-    - port: 3110
+    - port: 3100
       protocol: TCP
       name: http-metrics
       targetPort: http-metrics
@@ -151,7 +151,7 @@ spec:
           image: grafana/promtail:2.9.0
           args:
             - -config.file=/etc/promtail/config.yml
-            - -client.url=http://loki:3110/loki/api/v1/push
+            - -client.url=http://loki:3100/loki/api/v1/push
           env:
             - name: HOSTNAME
               valueFrom:
@@ -363,7 +363,7 @@ data:
     auth_enabled: false
 
     server:
-      http_listen_port: 3110
+      http_listen_port: 3100
       grpc_listen_port: 9096
       log_level: info
 
@@ -439,7 +439,7 @@ data:
       filename: /tmp/positions.yaml
 
     clients:
-      - url: http://loki:3110/loki/api/v1/push
+      - url: http://loki:3100/loki/api/v1/push
 
     scrape_configs:
       # API Gateway logs

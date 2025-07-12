@@ -8,7 +8,7 @@ data:
     auth_enabled: false
 
     server:
-      http_listen_port: 3110
+      http_listen_port: 3100
       grpc_listen_port: 9096
       log_level: info
 
@@ -88,7 +88,7 @@ data:
       filename: /tmp/positions.yaml
 
     clients:
-      - url: http://loki:3110/loki/api/v1/push
+      - url: http://loki:3100/loki/api/v1/push
         timeout: 10s
         backoff_config:
           min_period: 500ms
@@ -310,7 +310,7 @@ data:
         Name            loki
         Match           *
         Host            loki.logging.svc.cluster.local
-        Port            3110
+        Port            3100
         Labels          app=$kubernetes['labels']['app'], namespace=$kubernetes['namespace_name'], pod=$kubernetes['pod_name'], container=$kubernetes['container_name']
         Label_keys      level,component,correlation_id,user_id,method,path
         Batch_wait      1s
@@ -350,7 +350,7 @@ data:
       - name: Loki
         type: loki
         access: proxy
-        url: http://loki:3110
+        url: http://loki:3100
         isDefault: true
         editable: true
         jsonData:

@@ -121,7 +121,6 @@ func NewLogger(config Config) *Logger {
 	}
 
 	if config.EnableHooks {
-		// Add default hooks
 		logger.AddHook(&ErrorTrackingHook{})
 	}
 
@@ -193,7 +192,6 @@ func (l *Logger) log(level LogLevel, msg string, fields map[string]interface{}) 
 		Fields:    fields,
 	}
 
-	// Extract common fields from context if available
 	if l.ctx != nil {
 		if correlationID := GetCorrelationID(l.ctx); correlationID != "" {
 			entry.CorrelationID = correlationID
@@ -206,7 +204,6 @@ func (l *Logger) log(level LogLevel, msg string, fields map[string]interface{}) 
 		}
 	}
 
-	// Extract error details
 	if err, ok := fields["error"].(error); ok {
 		entry.Error = err.Error()
 		if level >= ERROR {
@@ -215,7 +212,6 @@ func (l *Logger) log(level LogLevel, msg string, fields map[string]interface{}) 
 		delete(fields, "error")
 	}
 
-	// Extract HTTP fields
 	if method, ok := fields["method"].(string); ok {
 		entry.Method = method
 		delete(fields, "method")
@@ -241,26 +237,30 @@ func (l *Logger) log(level LogLevel, msg string, fields map[string]interface{}) 
 		delete(fields, "user_agent")
 	}
 
-	// Fire hooks
 	for _, hook := range l.hooks {
 		if l.shouldFireHook(hook, level) {
 			if err := hook.Fire(entry); err != nil {
-				// Log hook errors to stderr to avoid infinite loops
+				// Use standard log to avoid recursion
 				log.Printf("Hook error: %v", err)
 			}
 		}
 	}
 
-	// Format and write log
 	formatted, err := l.formatter.Format(entry)
 	if err != nil {
 		log.Printf("Log formatting error: %v", err)
 		return
 	}
 
-	l.output.Write(formatted)
+	_, writeErr := l.output.Write(formatted)
+	if writeErr != nil {
+		log.Printf("Log write error: %v", writeErr)
+	}
 
-	// For FATAL level, exit the program
+	if syncer, ok := l.output.(interface{ Sync() error }); ok {
+		syncer.Sync()
+	}
+
 	if level == FATAL {
 		os.Exit(1)
 	}
